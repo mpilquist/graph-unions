@@ -19,7 +19,7 @@ object Graph:
   def withVertices(edges: (Vertex, Vertex)*): Graph =
     val adjacencies =
       edges.foldLeft(Map.empty[Vertex, Set[Vertex]]) { case (acc, (from, to)) =>
-        acc.updated(from, acc.getOrElse(from, Set.empty) + to)
+        acc.updated(from, acc.getOrElse(from, Set.empty) + to).updated(to, acc.getOrElse(to, Set.empty))
       }
     Graph(adjacencies)
 ```
@@ -29,7 +29,8 @@ val g1 = Graph(1 -> 2, 2 -> 3)
 // g1: Graph = Graph(
 //   adjacencies = Map(
 //     Vertex(id = 1) -> Set(Vertex(id = 2)),
-//     Vertex(id = 2) -> Set(Vertex(id = 3))
+//     Vertex(id = 2) -> Set(Vertex(id = 3)),
+//     Vertex(id = 3) -> Set()
 //   )
 // )
 ```
@@ -61,4 +62,26 @@ We can generalize the two non-trivial examples to more general laws:
 def merge(g1: Graph, g2: Graph): Graph =
   import cats.syntax.all.*
   Graph(g1.adjacencies |+| g2.adjacencies)
+```
+
+```scala
+def union(gs: Vector[Graph]): Vector[Graph] =
+  gs.foldLeft(Vector.empty[Graph], Map.empty[Vertex, Int]) { case ((acc, lookup), g) =>
+    // Find indices of graphs with overlapping vertices
+    val vertices = g.adjacencies.keySet
+    val indices = vertices.flatMap(v => lookup.get(v))
+    if indices.isEmpty then (acc :+ g, lookup ++ vertices.iterator.map(_ -> acc.size))
+    else
+      // Target index is the minimum index with
+      val newIndex = indices.min
+      val otherIndices = indices - newIndex
+      val merged = merge(otherIndices.foldLeft(acc(newIndex))((m, i) => merge(m, acc(i))), g)
+      // Null out each other index & fix up vertex lookup table to point to new index
+      otherIndices.foldLeft((acc.updated(newIndex, merged), lookup)) { case ((newAcc, newLookup), idx) =>
+        newAcc.updated(idx, null) -> (newLookup ++ acc(idx).adjacencies.keySet.iterator.map(_ -> newIndex))
+      }
+  }(0).filterNot(_ eq null)
+
+println(union(Vector(Graph(1 -> 2, 3 -> 4), Graph(2 -> 3))))
+// Vector(Graph(Map(Vertex(1) -> Set(Vertex(2)), Vertex(2) -> Set(Vertex(3)), Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set())))
 ```
