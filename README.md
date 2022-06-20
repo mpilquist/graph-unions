@@ -40,8 +40,8 @@ Let's consider a few examples. First, let's consider some simple cases:
 - singleton input: `union(Vector(g)) == Vector(g)` for every graph `g`
 
 An example that unions a graph:
-- `union(Vector(graph(1 -> 2), graph(2 -> 3))) == Vector(graph(1 -> 2, 2 -> 3))
+- `union(Vector(graph(1 -> 2), graph(2 -> 3))) == Vector(graph(1 -> 2, 2 -> 3))`
 
 And another that takes disjoint graphs as input:
-- `union(Vector(graph(1 -> 2), graph(3 -> 4))) == Vector(graph(1 -> 2), graph(3 -> 4))
+- `union(Vector(graph(1 -> 2), graph(3 -> 4))) == Vector(graph(1 -> 2), graph(3 -> 4))`
 
