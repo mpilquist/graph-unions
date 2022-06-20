@@ -11,24 +11,26 @@ For starters, we'll need a representation of a graph. One of the simplest repres
 ```scala
 case class Vertex(id: Int)
 case class Edge(from: Vertex, to: Vertex)
-case class Graph(edges: Set[Edge], vertices: Set[Vertex])
+case class Graph(adjacencies: Map[Vertex, Set[Vertex]])
+
+object Graph:
+  def apply(edges: (Int, Int)*): Graph =
+    fromEdges(edges.map((from, to) => Edge(Vertex(from), Vertex(to)))*)
+
+  def fromEdges(edges: Edge*): Graph =
+    val adjacencies = edges.foldLeft(Map.empty[Vertex, Set[Vertex]]) { (acc, e) =>
+      acc.updated(e.from, acc.getOrElse(e.from, Set.empty) + e.to)
+    }
+    Graph(adjacencies)
 ```
 
-Let's also create a quick way to construct a graph throughout this article:
-
 ```scala
-def graph(edges: (Int, Int)*): Graph =
-  val es = edges.map((from, to) => Edge(Vertex(from), Vertex(to))).toSet
-  val vs = es.flatMap(e => Set(e.from, e.to))
-  Graph(es, vs)
-
-val g1 = graph(1 -> 2, 2 -> 3)
+val g1 = Graph(1 -> 2, 2 -> 3)
 // g1: Graph = Graph(
-//   edges = Set(
-//     Edge(from = Vertex(id = 1), to = Vertex(id = 2)),
-//     Edge(from = Vertex(id = 2), to = Vertex(id = 3))
-//   ),
-//   vertices = Set(Vertex(id = 1), Vertex(id = 2), Vertex(id = 3))
+//   adjacencies = Map(
+//     Vertex(id = 1) -> Set(Vertex(id = 2)),
+//     Vertex(id = 2) -> Set(Vertex(id = 3))
+//   )
 // )
 ```
 
@@ -50,6 +52,13 @@ And another that takes disjoint graphs as input:
 - `union(Vector(graph(1 -> 2), graph(3 -> 4))) == Vector(graph(1 -> 2), graph(3 -> 4))`
 
 We can generalize the two non-trivial examples to more general laws:
-- given `gs: Vector[Graph]` such that every member has the same vertex set, `union(gs) = Vector(u)` where `u` is the union of all edge sets in `gs
-- given `gs: Vector[Graph]` such that all members are disjoin, `union(gs) == gs`
+- given `gs: Vector[Graph]` such that every member has the same vertex set, `union(gs) = Vector(u)` where `u` is the union of all edge sets in `gs`
+- given `gs: Vector[Graph]` such that all members are disjoint, `union(gs) == gs`
 
+## TODO
+
+```scala
+def merge(g1: Graph, g2: Graph): Graph =
+  import cats.syntax.all.*
+  Graph(g1.adjacencies |+| g2.adjacencies)
+```
