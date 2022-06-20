@@ -46,11 +46,11 @@ Let's consider a few examples. First, let's consider some simple cases:
 - singleton input: `union(Vector(g)) == Vector(g)` for every graph `g`
 
 And some examples that perform unions:
-- `union(Vector(graph(1 -> 2), graph(2 -> 3))) == Vector(graph(1 -> 2, 2 -> 3))`
-- `union(Vector(graph(1 -> 2), graph(3 -> 4), graph(2 -> 3)) == Vector(graph(1 -> 2, 2 -> 3, 3 -> 4))`
+- `union(Vector(Graph(1 -> 2), Graph(2 -> 3))) == Vector(Graph(1 -> 2, 2 -> 3))`
+- `union(Vector(Graph(1 -> 2), Graph(3 -> 4), Graph(2 -> 3)) == Vector(Graph(1 -> 2, 2 -> 3, 3 -> 4))`
 
 And another that takes disjoint graphs as input:
-- `union(Vector(graph(1 -> 2), graph(3 -> 4))) == Vector(graph(1 -> 2), graph(3 -> 4))`
+- `union(Vector(Graph(1 -> 2), Graph(3 -> 4))) == Vector(Graph(1 -> 2), Graph(3 -> 4))`
 
 We can generalize the two non-trivial examples to more general laws:
 - given `gs: Vector[Graph]` such that every member has the same vertex set, `union(gs) = Vector(u)` where `u` is the union of all edge sets in `gs`
