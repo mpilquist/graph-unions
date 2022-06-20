@@ -36,12 +36,12 @@ def union(gs: Vector[Graph]): Vector[Graph] = ???
 ```
 
 Let's consider a few examples. First, let's consider some simple cases:
-1. `union(Vector.empty) == Vector.empty`
-2. `union(Vector(g)) == Vector(g)` for every graph `g`
+- empty input: `union(Vector.empty) == Vector.empty`
+- singleton input: `union(Vector(g)) == Vector(g)` for every graph `g`
 
-And an example that unions a graph:
-3. `union(Vector(graph(1 -> 2), graph(2 -> 3))) == Vector(graph(1 -> 2, 2 -> 3))
+An example that unions a graph:
+- `union(Vector(graph(1 -> 2), graph(2 -> 3))) == Vector(graph(1 -> 2, 2 -> 3))
 
 And another that takes disjoint graphs as input:
-4. `union(Vector(graph(1 -> 2), graph(3 -> 4))) == Vector(graph(1 -> 2), graph(3 -> 4))
+- `union(Vector(graph(1 -> 2), graph(3 -> 4))) == Vector(graph(1 -> 2), graph(3 -> 4))
 
