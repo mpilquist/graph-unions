@@ -6,21 +6,21 @@ I recently came across an interesting problem:
 
 That is, each graph in the output should be the union of the graphs from the input which have at least one vertex in common. In this article, we'll look at how to efficiently implement this computation in Scala.
 
-For starters, we'll need a representation of a graph. One of the simplest representations is a set edges and vertices, where an edge is simply a pairing of two vertices:
+For starters, we'll need a representation of a graph. One common implementation is an [adjacencty list](https://en.wikipedia.org/wiki/Adjacency_list), where an edge from `a` to `b` is represented as `b` being in the set under entry `a` in a map:
 
 ```scala
 case class Vertex(id: Int)
-case class Edge(from: Vertex, to: Vertex)
 case class Graph(adjacencies: Map[Vertex, Set[Vertex]])
 
 object Graph:
   def apply(edges: (Int, Int)*): Graph =
-    fromEdges(edges.map((from, to) => Edge(Vertex(from), Vertex(to)))*)
+    withVertices(edges.map((f, t) => (Vertex(f), Vertex(t)))*)
 
-  def fromEdges(edges: Edge*): Graph =
-    val adjacencies = edges.foldLeft(Map.empty[Vertex, Set[Vertex]]) { (acc, e) =>
-      acc.updated(e.from, acc.getOrElse(e.from, Set.empty) + e.to)
-    }
+  def withVertices(edges: (Vertex, Vertex)*): Graph =
+    val adjacencies =
+      edges.foldLeft(Map.empty[Vertex, Set[Vertex]]) { case (acc, (from, to)) =>
+        acc.updated(from, acc.getOrElse(from, Set.empty) + to)
+      }
     Graph(adjacencies)
 ```
 
