@@ -70,8 +70,8 @@ Let's write these laws as a [ScalaCheck](https://scalacheck.org/) test. For star
 ```scala
 import org.scalacheck.{Arbitrary, Gen, Prop, Properties, Test}
 
-def genGraph: Gen[Graph] = Gen.sized { size =>
-  val maxVertexId = 2 * size
+def genGraph: Gen[Graph] =
+  val maxVertexId = Int.MaxValue
   val genEdge = for
     f <- Gen.chooseNum(0, maxVertexId)
     t <- Gen.chooseNum(0, maxVertexId)
@@ -79,7 +79,6 @@ def genGraph: Gen[Graph] = Gen.sized { size =>
   Gen.listOf(genEdge)
     .filter(_.nonEmpty)
     .map(es => Graph(es*))
-}
 
 given arbitraryGraph: Arbitrary[Graph] = Arbitrary(genGraph)
 ```
@@ -140,35 +139,61 @@ def alternateDefinition(union: Vector[Graph] => Vector[Graph]): Prop =
 Given this test definition, let's try testing with various wrong but instructive functions in place of union:
 ```scala
 def runUnionTest(union: Vector[Graph] => Vector[Graph]): Unit =
-  testUnion(union).check(Test.Parameters.default.withMinSuccessfulTests(1000))
+  testUnion(union).check(
+    Test.Parameters.default
+      .withMinSuccessfulTests(200)
+      .withInitialSeed(0L) // Generate same results on each run
+  )
 
 runUnionTest(identity)
 // + union.empty: OK, proved property.
-// + union.singleton: OK, passed 1000 tests.
-// failing seed for union.duplicates is 3HCNKrGMMZKskF3EJSsL3ufUaIPIP5xfh27-nvolT-P=
+// + union.singleton: OK, passed 200 tests.
+// failing seed for union.duplicates is F7AGdOeo9Gw8L_ZlIIKVdLkGItFMrNJCLCVq3d93PSC=
 // ! union.duplicates: Falsified after 0 passed tests.
-// > ARG_0: Graph(0 -> {}, 1 -> {0})
-// failing seed for union.outputs disjoint is 6RH-JDgM39HynyqnR8lmwDE5n8ctQ_DfuC6O3gJFoUG=
-// ! union.outputs disjoint: Falsified after 16 passed tests.
-// > ARG_0: Vector(Graph(0 -> {}, 1 -> {}, 2 -> {1}), Graph(0 -> {}))
-// + union.inputs disjoint: OK, passed 1000 tests.
-// + union.same edges and vertices: OK, passed 1000 tests.
+// > ARG_0: Graph(94077798 -> {2147483647}, 195329348 -> {355048233}, 35504823
+//   3 -> {}, 2147483647 -> {})
+// failing seed for union.outputs disjoint is JdYYw4z5v5nkiOzYxFiaMdO1VdY7WwSUfYrFqDP56LE=
+// ! union.outputs disjoint: Falsified after 8 passed tests.
+// > ARG_0: Vector(Graph(0 -> {236415665
+// 733350614
+// 2147483647}, 236415665 -> {}, 733350614 -> {}, 761876842 -> {836701853}, 83
+//   6701853 -> {}, 2147483647 -> {}), Graph(1 -> {}, 1742466814 -> {214748364
+//   7}, 2147483647 -> {1}))
+// > ARG_0_ORIGINAL: Vector(Graph(0 -> {}, 1 -> {645059432}, 645059432 -> {}, 
+//   759959740 -> {}, 1001598166 -> {}, 1893928099 -> {1001598166}, 2147483647
+//    -> {759959740}), Graph(0 -> {236415665
+// 733350614
+// 2147483647}, 236415665 -> {}, 733350614 -> {}, 761876842 -> {836701853}, 83
+//   6701853 -> {}, 2147483647 -> {}), Graph(1 -> {}, 1742466814 -> {214748364
+//   7}, 2147483647 -> {1}))
+// + union.inputs disjoint: OK, passed 200 tests.
+// + union.same edges and vertices: OK, passed 200 tests.
 
 runUnionTest(_ => Vector.empty)
 // + union.empty: OK, proved property.
-// failing seed for union.singleton is ewTp3wSuKarPc5I3ffR_2O5CGFHKhe5xfJVxqcLycBO=
+// failing seed for union.singleton is F7AGdOeo9Gw8L_ZlIIKVdLkGItFMrNJCLCVq3d93PSC=
 // ! union.singleton: Falsified after 0 passed tests.
-// > ARG_0: Graph(0 -> {}, 2 -> {0})
-// failing seed for union.duplicates is 24LIkwoUIOa_PgpasXXqcJ05sl3xTytNTIUSDmFZKeG=
+// > ARG_0: Graph(94077798 -> {2147483647}, 195329348 -> {355048233}, 35504823
+//   3 -> {}, 2147483647 -> {})
+// failing seed for union.duplicates is F7AGdOeo9Gw8L_ZlIIKVdLkGItFMrNJCLCVq3d93PSC=
 // ! union.duplicates: Falsified after 0 passed tests.
-// > ARG_0: Graph(0 -> {})
-// + union.outputs disjoint: OK, passed 1000 tests.
-// failing seed for union.inputs disjoint is _PlUBSBZoBks0X_EA65eo5DYuYO9r9-MFqcA8NltvuI=
-// ! union.inputs disjoint: Falsified after 7 passed tests.
-// > ARG_0: Vector(Graph(0 -> {2}, 2 -> {}))
-// failing seed for union.same edges and vertices is wbQf5TGDmqCNbVQ8p3hFmBu63Rr8zsZyZkiNnacO0DL=
-// ! union.same edges and vertices: Falsified after 5 passed tests.
-// > ARG_0: Vector(Graph(1 -> {}, 2 -> {1}))
+// > ARG_0: Graph(94077798 -> {2147483647}, 195329348 -> {355048233}, 35504823
+//   3 -> {}, 2147483647 -> {})
+// + union.outputs disjoint: OK, passed 200 tests.
+// failing seed for union.inputs disjoint is F7AGdOeo9Gw8L_ZlIIKVdLkGItFMrNJCLCVq3d93PSC=
+// ! union.inputs disjoint: Falsified after 3 passed tests.
+// > ARG_0: Vector(Graph(94077798 -> {2147483647}, 1915108540 -> {2147483647},
+//    2147483647 -> {}))
+// > ARG_0_ORIGINAL: Vector(Graph(94077798 -> {2147483647}, 1915108540 -> {214
+//   7483647}, 2147483647 -> {}), Graph(1589642763 -> {1937867784}, 1937867784
+//    -> {}))
+// failing seed for union.same edges and vertices is F7AGdOeo9Gw8L_ZlIIKVdLkGItFMrNJCLCVq3d93PSC=
+// ! union.same edges and vertices: Falsified after 3 passed tests.
+// > ARG_0: Vector(Graph(94077798 -> {2147483647}, 1915108540 -> {2147483647},
+//    2147483647 -> {}))
+// > ARG_0_ORIGINAL: Vector(Graph(94077798 -> {2147483647}, 1915108540 -> {214
+//   7483647}, 2147483647 -> {}), Graph(1589642763 -> {1937867784}, 1937867784
+//    -> {}))
 ```
 
 ## A First Solution
@@ -203,20 +228,93 @@ When the second input graph is processed, it's disjoint with all the graphs proc
 ```scala
 runUnionTest(unionFirst)
 // + union.empty: OK, proved property.
-// + union.singleton: OK, passed 1000 tests.
-// + union.duplicates: OK, passed 1000 tests.
-// failing seed for union.outputs disjoint is mitQqObXy09o6jqbJJBfWTAa3SjpqB7C9E6klEEratL=
-// ! union.outputs disjoint: Falsified after 72 passed tests.
-// > ARG_0: Vector(Graph(1 -> {}), Graph(0 -> {10}, 5 -> {}, 7 -> {13
-// 14}, 10 -> {}, 13 -> {}, 14 -> {5}), Graph(1 -> {9}, 5 -> {1}, 9 -> {}, 11 
-//   -> {14}, 13 -> {14}, 14 -> {}))
-// > ARG_0_ORIGINAL: Vector(Graph(1 -> {}), Graph(0 -> {10}, 5 -> {}, 7 -> {13
-// 14}, 10 -> {}, 13 -> {}, 14 -> {5}), Graph(1 -> {9}, 5 -> {1}, 9 -> {}, 11 
-//   -> {14}, 13 -> {14}, 14 -> {}), Graph(0 -> {}, 1 -> {}, 2 -> {1}, 3 -> {}
-//   , 4 -> {8}, 7 -> {0}, 8 -> {}, 9 -> {0}, 14 -> {3}), Graph(0 -> {1}, 1 ->
-//    {}, 2 -> {}, 6 -> {9}, 9 -> {}, 13 -> {2}))
-// + union.inputs disjoint: OK, passed 1000 tests.
-// + union.same edges and vertices: OK, passed 1000 tests.
+// + union.singleton: OK, passed 200 tests.
+// + union.duplicates: OK, passed 200 tests.
+// failing seed for union.outputs disjoint is -F6rV9Z_rr5kdDjSS6N2w3CeLgdPEg2pyo0rvV_y_PM=
+// ! union.outputs disjoint: Falsified after 57 passed tests.
+// > ARG_0: Vector(Graph(1 -> {1101052223
+// 2147483647}, 889507963 -> {}, 892689410 -> {1072385597}, 992184819 -> {}, 1
+//   072385597 -> {}, 1101052223 -> {}, 1387800248 -> {889507963}, 1445334849 
+//   -> {992184819}, 2147483647 -> {}), Graph(0 -> {593351111}, 435977641 -> {
+//   }, 593351111 -> {}, 834133036 -> {435977641}, 835874874 -> {1638351888}, 
+//   1638351888 -> {}), Graph(0 -> {1
+// 756281452
+// 1522154439
+// 2147483647}, 1 -> {}, 75575186 -> {1}, 129663476 -> {}, 756281452 -> {}, 12
+//   34396351 -> {1973813032}, 1415829772 -> {0}, 1522154439 -> {}, 1529821256
+//    -> {1}, 1542832868 -> {129663476}, 1725256721 -> {0}, 1804832322 -> {}, 
+//   1973813032 -> {}, 2147483647 -> {1804832322}))
+// > ARG_0_ORIGINAL: Vector(Graph(1 -> {1101052223
+// 2147483647}, 889507963 -> {}, 892689410 -> {1072385597}, 992184819 -> {}, 1
+//   072385597 -> {}, 1101052223 -> {}, 1387800248 -> {889507963}, 1445334849 
+//   -> {992184819}, 2147483647 -> {}), Graph(0 -> {593351111}, 435977641 -> {
+//   }, 593351111 -> {}, 834133036 -> {435977641}, 835874874 -> {1638351888}, 
+//   1638351888 -> {}), Graph(0 -> {1
+// 756281452
+// 1522154439
+// 2147483647}, 1 -> {}, 75575186 -> {1}, 129663476 -> {}, 756281452 -> {}, 12
+//   34396351 -> {1973813032}, 1415829772 -> {0}, 1522154439 -> {}, 1529821256
+//    -> {1}, 1542832868 -> {129663476}, 1725256721 -> {0}, 1804832322 -> {}, 
+//   1973813032 -> {}, 2147483647 -> {1804832322}), Graph(0 -> {1
+// 540545758
+// 677247257
+// 1058799948
+// 1644140462
+// 2126444234}, 1 -> {1220618353
+// 1478357549
+// 2046794673
+// 2147483647}, 90071536 -> {}, 98038299 -> {}, 105056754 -> {0}, 337598213 ->
+//    {}, 540545758 -> {}, 590254530 -> {98038299}, 677247257 -> {}, 689544229
+//    -> {2147483647}, 821704892 -> {}, 869103361 -> {}, 1025863429 -> {1}, 10
+//   58799948 -> {}, 1091536662 -> {}, 1119276974 -> {1122595516}, 1122595516 
+//   -> {}, 1220618353 -> {}, 1361819771 -> {2147483647}, 1478357549 -> {}, 15
+//   35108916 -> {90071536}, 1644140462 -> {}, 1863544590 -> {0}, 1890645765 -
+//   > {0}, 2028961817 -> {821704892}, 2032001708 -> {0}, 2046794673 -> {}, 20
+//   76456035 -> {}, 2126444234 -> {}, 2147483647 -> {337598213
+// 869103361
+// 1091536662
+// 2076456035}), Graph(0 -> {196888504}, 1 -> {575446977}, 20201552 -> {189227
+//   5067}, 196888504 -> {}, 575446977 -> {}, 696574642 -> {0}, 1774140150 -> 
+//   {1}, 1892275067 -> {}), Graph(0 -> {828132337}, 412447466 -> {1966798050}
+//   , 715035580 -> {}, 828132337 -> {}, 921555681 -> {}, 1958735074 -> {92155
+//   5681}, 1966798050 -> {}, 2147483647 -> {0
+// 715035580}), Graph(0 -> {31844466
+// 927374390
+// 995295706
+// 1661271094}, 1 -> {1398962946
+// 1884087407}, 31844466 -> {}, 63298995 -> {0}, 125790923 -> {0}, 261367302 -
+//   > {}, 262633978 -> {}, 368666837 -> {}, 384477595 -> {1}, 454715966 -> {2
+//   147483647}, 471566963 -> {}, 487242216 -> {}, 630550926 -> {2147483647}, 
+//   927374390 -> {}, 995295706 -> {}, 1035947580 -> {368666837}, 1132275839 -
+//   > {261367302}, 1333580229 -> {487242216}, 1370777095 -> {1781994495}, 139
+//   8962946 -> {}, 1426031529 -> {1}, 1661271094 -> {}, 1725289011 -> {1}, 17
+//   81994495 -> {}, 1884087407 -> {}, 1925058136 -> {1}, 2003655239 -> {}, 20
+//   04318575 -> {0}, 2060868742 -> {471566963}, 2147483647 -> {0
+// 262633978
+// 2003655239}), Graph(0 -> {}, 476885837 -> {994160560}, 994160560 -> {}), Gr
+//   aph(0 -> {703979985
+// 950949088
+// 1050455728}, 1 -> {178786197
+// 1419714965
+// 1445849326}, 3470459 -> {1057546828}, 178786197 -> {}, 703979985 -> {}, 846
+//   602373 -> {2104603917}, 950949088 -> {}, 971965010 -> {}, 1003829093 -> {
+//   971965010}, 1048790779 -> {0}, 1050455728 -> {}, 1057546828 -> {}, 113083
+//   7101 -> {0}, 1369586431 -> {1}, 1419714965 -> {}, 1445849326 -> {}, 18727
+//   05162 -> {1}, 1980593239 -> {2147483647}, 2104603917 -> {}, 2147483647 ->
+//    {}), Graph(0 -> {306114117
+// 352646320
+// 421493327
+// 2147483647}, 1 -> {780151214}, 1601494 -> {}, 149296161 -> {}, 306114117 ->
+//    {}, 333125538 -> {}, 352646320 -> {}, 421493327 -> {}, 591574355 -> {125
+//   7387812}, 609832497 -> {}, 780151214 -> {}, 1184389576 -> {1188215449}, 1
+//   188215449 -> {}, 1208154254 -> {0}, 1257387812 -> {}, 1490905186 -> {1}, 
+//   1509155605 -> {0}, 1688614006 -> {0}, 2138981714 -> {333125538}, 21474836
+//   47 -> {0
+// 1601494
+// 149296161
+// 609832497}))
+// + union.inputs disjoint: OK, passed 200 tests.
+// + union.same edges and vertices: OK, passed 200 tests.
 ```
 
 Okay, so when we merge a graph in to the disjoint set, two entries that were previously disjoint may no longer be disjoint. We could fix our issue by recursively calling our union function after merging -- i.e. `unionFirst(acc.updated(idx, acc(idx) |+| g))` -- but doing so wouldn't be tail recursive. Instead, we could run the full fold and when it completes, check if we've done any merges. If so, we recurse and otherwise we return. We can test if we've done merges by comparing the size of the input to the size of the output.
@@ -246,11 +344,58 @@ And it passes all of our laws:
 ```scala
 runUnionTest(unionRecursive)
 // + union.empty: OK, proved property.
-// + union.singleton: OK, passed 1000 tests.
-// + union.duplicates: OK, passed 1000 tests.
-// + union.outputs disjoint: OK, passed 1000 tests.
-// + union.inputs disjoint: OK, passed 1000 tests.
-// + union.same edges and vertices: OK, passed 1000 tests.
+// + union.singleton: OK, passed 200 tests.
+// + union.duplicates: OK, passed 200 tests.
+// + union.outputs disjoint: OK, passed 200 tests.
+// + union.inputs disjoint: OK, passed 200 tests.
+// + union.same edges and vertices: OK, passed 200 tests.
+```
+
+Let's see how it performs on large inputs. We'll need a way to time execution and a way to generate large inputs consistently (i.e., the same input run after run).
+
+```scala
+def time[A](a: => A): (Long, A) =
+  import scala.concurrent.duration.*
+  val started = System.nanoTime
+  val result = a
+  val elapsed = (System.nanoTime - started).nanos.toMillis
+  (elapsed, result)
+
+def generateGraphs(num: Int): Vector[Graph] =
+  val seed = org.scalacheck.rng.Seed(0L)
+  Gen.listOfN(num, genGraph)
+    .pureApply(Gen.Parameters.default, seed).toVector
+
+case class Stats(n: Int, min: Int, max: Int, mean: Int):
+  override def toString: String =
+    s"count: $n min: $min max: $max mean: $mean"
+
+object Stats:
+  def sample(x: Int) = Stats(1, x, x, x)
+
+given Monoid[Stats] with
+  def empty = Stats(0, Int.MaxValue, Int.MinValue, 0)
+  def combine(x: Stats, y: Stats) =
+    val mean = (((x.n / (x.n + y.n).toDouble) * x.mean) + ((y.n / (x.n + y.n).toDouble) * y.mean)).toInt
+    Stats(x.n + y.n, x.min min y.min, x.max max y.max, mean)
+
+def describe(gs: Vector[Graph]): String =
+  val statsVertices = gs.foldMap(g => Stats.sample(g.adjacencies.size))
+  val statsEdges = gs.foldMap(g => Stats.sample(g.adjacencies.values.map(_.size).sum))
+  s"Vertices: $statsVertices\nEdges: $statsEdges"
+
+def performance(numGraphs: Int, union: Vector[Graph] => Vector[Graph]): Unit =
+  val (elapsedGeneration, gs) = time(generateGraphs(numGraphs))
+  println(s"Took $elapsedGeneration millis to generate")
+  println(describe(gs))
+  val (elapsedUnion, us) = time(union(gs))
+  println(s"Reduced from ${gs.size} to ${us.size} in $elapsedUnion millis")
+
+performance(100000, unionRecursive)
+// Took 11710 millis to generate
+// Vertices: count: 100000 min: 1 max: 128 mean: 1
+// Edges: count: 100000 min: 0 max: 92 mean: 0
+// Reduced from 100000 to 373 in 7088 millis
 ```
 
 ## A Faster Solution
@@ -278,10 +423,10 @@ def unionFast(gs: Vector[Graph]): Vector[Graph] =
 
 runUnionTest(unionFast)
 // + union.empty: OK, proved property.
-// + union.singleton: OK, passed 1000 tests.
-// + union.duplicates: OK, passed 1000 tests.
-// + union.outputs disjoint: OK, passed 1000 tests.
-// + union.inputs disjoint: OK, passed 1000 tests.
-// + union.same edges and vertices: OK, passed 1000 tests.
+// + union.singleton: OK, passed 200 tests.
+// + union.duplicates: OK, passed 200 tests.
+// + union.outputs disjoint: OK, passed 200 tests.
+// + union.inputs disjoint: OK, passed 200 tests.
+// + union.same edges and vertices: OK, passed 200 tests.
 ```
 

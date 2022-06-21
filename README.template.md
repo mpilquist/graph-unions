@@ -63,8 +63,8 @@ Let's write these laws as a [ScalaCheck](https://scalacheck.org/) test. For star
 ```scala mdoc
 import org.scalacheck.{Arbitrary, Gen, Prop, Properties, Test}
 
-def genGraph: Gen[Graph] = Gen.sized { size =>
-  val maxVertexId = 2 * size
+def genGraph: Gen[Graph] =
+  val maxVertexId = Int.MaxValue
   val genEdge = for
     f <- Gen.chooseNum(0, maxVertexId)
     t <- Gen.chooseNum(0, maxVertexId)
@@ -72,7 +72,6 @@ def genGraph: Gen[Graph] = Gen.sized { size =>
   Gen.listOf(genEdge)
     .filter(_.nonEmpty)
     .map(es => Graph(es*))
-}
 
 given arbitraryGraph: Arbitrary[Graph] = Arbitrary(genGraph)
 ```
@@ -133,7 +132,11 @@ def alternateDefinition(union: Vector[Graph] => Vector[Graph]): Prop =
 Given this test definition, let's try testing with various wrong but instructive functions in place of union:
 ```scala mdoc
 def runUnionTest(union: Vector[Graph] => Vector[Graph]): Unit =
-  testUnion(union).check(Test.Parameters.default.withMinSuccessfulTests(1000))
+  testUnion(union).check(
+    Test.Parameters.default
+      .withMinSuccessfulTests(200)
+      .withInitialSeed(0L) // Generate same results on each run
+  )
 
 runUnionTest(identity)
 
@@ -196,6 +199,49 @@ And it passes all of our laws:
 
 ```scala mdoc
 runUnionTest(unionRecursive)
+```
+
+Let's see how it performs on large inputs. We'll need a way to time execution and a way to generate large inputs consistently (i.e., the same input run after run).
+
+```scala mdoc
+def time[A](a: => A): (Long, A) =
+  import scala.concurrent.duration.*
+  val started = System.nanoTime
+  val result = a
+  val elapsed = (System.nanoTime - started).nanos.toMillis
+  (elapsed, result)
+
+def generateGraphs(num: Int): Vector[Graph] =
+  val seed = org.scalacheck.rng.Seed(0L)
+  Gen.listOfN(num, genGraph)
+    .pureApply(Gen.Parameters.default, seed).toVector
+
+case class Stats(n: Int, min: Int, max: Int, mean: Int):
+  override def toString: String =
+    s"count: $n min: $min max: $max mean: $mean"
+
+object Stats:
+  def sample(x: Int) = Stats(1, x, x, x)
+
+given Monoid[Stats] with
+  def empty = Stats(0, Int.MaxValue, Int.MinValue, 0)
+  def combine(x: Stats, y: Stats) =
+    val mean = (((x.n / (x.n + y.n).toDouble) * x.mean) + ((y.n / (x.n + y.n).toDouble) * y.mean)).toInt
+    Stats(x.n + y.n, x.min min y.min, x.max max y.max, mean)
+
+def describe(gs: Vector[Graph]): String =
+  val statsVertices = gs.foldMap(g => Stats.sample(g.adjacencies.size))
+  val statsEdges = gs.foldMap(g => Stats.sample(g.adjacencies.values.map(_.size).sum))
+  s"Vertices: $statsVertices\nEdges: $statsEdges"
+
+def performance(numGraphs: Int, union: Vector[Graph] => Vector[Graph]): Unit =
+  val (elapsedGeneration, gs) = time(generateGraphs(numGraphs))
+  println(s"Took $elapsedGeneration millis to generate")
+  println(describe(gs))
+  val (elapsedUnion, us) = time(union(gs))
+  println(s"Reduced from ${gs.size} to ${us.size} in $elapsedUnion millis")
+
+performance(100000, unionRecursive)
 ```
 
 ## A Faster Solution
