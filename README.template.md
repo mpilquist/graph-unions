@@ -77,6 +77,13 @@ def testUnion(union: Vector[Graph] => Vector[Graph]) =
       val us = union(gs)
       us.forall(u => us.forall(u2 => (u eq u2) || !overlaps(u, u2)))
     } :| "outputs disjoint"
+    && Prop.forAll { (gs0: Vector[Graph]) =>
+      val gs = gs0.zipWithIndex.map { (g, idx) =>
+        val offset = idx * 1000000
+        Graph(g.adjacencies.map((k, vs) => (Vertex(k.id + offset), vs.map(v => Vertex(v.id + offset)))))
+      }
+      union(gs) == gs
+    } :| "inputs disjoint"
 ```
 
 ## TODO
