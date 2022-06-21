@@ -392,10 +392,10 @@ def performance(numGraphs: Int, union: Vector[Graph] => Vector[Graph]): Unit =
   println(s"Reduced from ${gs.size} to ${us.size} in $elapsedUnion millis")
 
 performance(100000, unionRecursive)
-// Took 11710 millis to generate
+// Took 10261 millis to generate
 // Vertices: count: 100000 min: 1 max: 128 mean: 1
 // Edges: count: 100000 min: 0 max: 92 mean: 0
-// Reduced from 100000 to 373 in 7088 millis
+// Reduced from 100000 to 373 in 5998 millis
 ```
 
 ## A Faster Solution
@@ -428,5 +428,11 @@ runUnionTest(unionFast)
 // + union.outputs disjoint: OK, passed 200 tests.
 // + union.inputs disjoint: OK, passed 200 tests.
 // + union.same edges and vertices: OK, passed 200 tests.
+
+performance(100000, unionFast)
+// Took 9240 millis to generate
+// Vertices: count: 100000 min: 1 max: 128 mean: 1
+// Edges: count: 100000 min: 0 max: 92 mean: 0
+// Reduced from 100000 to 373 in 12479 millis
 ```
 

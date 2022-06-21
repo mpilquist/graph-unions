@@ -268,5 +268,7 @@ def unionFast(gs: Vector[Graph]): Vector[Graph] =
   }(0).filterNot(_ eq null)
 
 runUnionTest(unionFast)
+
+performance(100000, unionFast)
 ```
 
