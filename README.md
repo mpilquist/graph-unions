@@ -56,15 +56,18 @@ We can generalize the two non-trivial examples to more general laws:
 - given `gs: Vector[Graph]` such that all members have the same vertex set, `union(gs) = Vector(u)` where `u` is the union of all edge sets in `gs`
 - given `gs: Vector[Graph]` such that all members have disjoint vertex sets, `union(gs) == gs`
 
-Let's write these as a [ScalaCheck](https://scalacheck.org/) test:
+We can also say that the union of input graphs must be equal to the union of all the output graphs (that is, the total set of edges & vertices are the same).
+
+Let's write these laws as a [ScalaCheck](https://scalacheck.org/) test. For starters, we'll need a generator for graphs:
 
 ```scala
-import org.scalacheck.{Arbitrary, Gen, Prop}
+import org.scalacheck.{Arbitrary, Gen, Prop, Properties}
 
 def genGraph: Gen[Graph] = Gen.sized { size =>
+  val maxVertexId = 2 * size
   val genEdge = for
-    f <- Gen.chooseNum(0, size)
-    t <- Gen.chooseNum(0, size)
+    f <- Gen.chooseNum(0, maxVertexId)
+    t <- Gen.chooseNum(0, maxVertexId)
   yield (f, t)
   Gen.listOf(genEdge)
     .filter(_.nonEmpty)
@@ -72,30 +75,78 @@ def genGraph: Gen[Graph] = Gen.sized { size =>
 }
 
 given arbitraryGraph: Arbitrary[Graph] = Arbitrary(genGraph)
+```
 
+Given this generator, we can define various properties for each of the laws we came up with:
+
+```scala
+/** Returns true if the arguments have at least one vertex in common. */
 def overlaps(g1: Graph, g2: Graph): Boolean =
   g1.adjacencies.keySet.exists(g2.adjacencies.keySet.contains)
 
-def testUnion(union: Vector[Graph] => Vector[Graph]) =
-  Prop.secure(union(Vector.empty) == Vector.empty) :| "empty"
-    && Prop.forAll((g: Graph) => union(Vector(g)) == Vector(g)) :| "singleton"
-    && Prop.forAll((g: Graph) => union(Vector(g, g)) == Vector(g)) :| "duplicates"
-    && Prop.forAll { (gs: Vector[Graph]) =>
-      val us = union(gs)
-      us.forall(u => us.forall(u2 => (u eq u2) || !overlaps(u, u2)))
-    } :| "outputs disjoint"
-    && Prop.forAll { (gs0: Vector[Graph]) =>
-      // Re-index vertices so they don't overlap
-      val gs = gs0.zipWithIndex.map { (g, idx) =>
-        val offset = idx * 1000000
-        Graph(g.adjacencies.map((k, vs) => (Vertex(k.id + offset), vs.map(v => Vertex(v.id + offset)))))
-      }
-      union(gs) == gs
-    } :| "inputs disjoint"
-    && Prop.forAll { (gs: Vector[Graph]) =>
-      import cats.syntax.all.*
-      gs.foldMap(_.adjacencies) == union(gs).foldMap(_.adjacencies)
-    } :| "same edges and vertices"
+def testUnion(union: Vector[Graph] => Vector[Graph]) = new Properties("union"):
+  property("empty") = Prop.secure(union(Vector.empty) == Vector.empty)
+
+  property("singleton") = Prop.forAll((g: Graph) => union(Vector(g)) == Vector(g))
+
+  property("duplicates") = Prop.forAll((g: Graph) => union(Vector(g, g)) == Vector(g))
+
+  property("outputs disjoint") = Prop.forAll { (gs: Vector[Graph]) =>
+    val us = union(gs)
+    us.forall(u => us.forall(u2 => (u eq u2) || !overlaps(u, u2)))
+  }
+
+  property("inputs disjoint") = Prop.forAll { (gs0: Vector[Graph]) =>
+    // Re-index vertices so they don't overlap
+    val gs = gs0.zipWithIndex.map { (g, idx) =>
+      val offset = idx * 1000000
+      Graph(g.adjacencies.map((k, vs) => (Vertex(k.id + offset), vs.map(v => Vertex(v.id + offset)))))
+    }
+    union(gs) == gs
+  }
+
+  property("same edges and vertices") = Prop.forAll { (gs: Vector[Graph]) =>
+    import cats.syntax.all.*
+    gs.foldMap(_.adjacencies) == union(gs).foldMap(_.adjacencies)
+  }
+```
+
+Given this test definition, let's try testing with various wrong but instructive functions in place of union:
+```scala
+testUnion(identity).check()
+// + union.empty: OK, proved property.
+// + union.singleton: OK, passed 100 tests.
+// failing seed for union.duplicates is jB35C0lmMQPZNoShcobR8U01MAOJ4ZP389DrhAwHtwP=
+// ! union.duplicates: Falsified after 0 passed tests.
+// > ARG_0: Graph(Map(Vertex(0) -> Set(Vertex(1)), Vertex(1) -> Set(), Vertex(
+//   8) -> Set()))
+// failing seed for union.outputs disjoint is e9n31ERwwDNUtqnxF_j_njV7Ya9RiOJiGGqFvPbC3ED=
+// ! union.outputs disjoint: Falsified after 5 passed tests.
+// > ARG_0: Vector(Graph(HashMap(Vertex(6) -> Set(), Vertex(10) -> Set(), Vert
+//   ex(4) -> Set(Vertex(6)), Vertex(9) -> Set(Vertex(5), Vertex(10)), Vertex(
+//   5) -> Set())), Graph(Map(Vertex(0) -> Set(Vertex(10)), Vertex(10) -> Set(
+//   Vertex(5)), Vertex(5) -> Set())))
+// + union.inputs disjoint: OK, passed 100 tests.
+// + union.same edges and vertices: OK, passed 100 tests.
+
+testUnion(_ => Vector.empty).check()
+// + union.empty: OK, proved property.
+// failing seed for union.singleton is 6eqSjmGm5CD2gCtN7CqG4jytjud17gjLp_cfJ95Sc1E=
+// ! union.singleton: Falsified after 0 passed tests.
+// > ARG_0: Graph(Map(Vertex(0) -> Set()))
+// failing seed for union.duplicates is SVZzEjVkcvvTfDbmZVDMMerpAJzX7i-C6ksbXRVCHmK=
+// ! union.duplicates: Falsified after 0 passed tests.
+// > ARG_0: Graph(Map(Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set(Vertex(1))
+//   , Vertex(1) -> Set()))
+// + union.outputs disjoint: OK, passed 100 tests.
+// failing seed for union.inputs disjoint is 5wlfN7v2x3k0mDcc93v5E6dIz-SXcx2y_i272FNk7TF=
+// ! union.inputs disjoint: Falsified after 1 passed tests.
+// > ARG_0: Vector(Graph(Map(Vertex(1) -> Set(Vertex(2)), Vertex(2) -> Set()))
+//   )
+// failing seed for union.same edges and vertices is 8eXXYmFq1hqGUTaL0zbqzG7STzHypKJs39K6ZYqfpyO=
+// ! union.same edges and vertices: Falsified after 1 passed tests.
+// > ARG_0: Vector(Graph(Map(Vertex(0) -> Set(Vertex(1)), Vertex(1) -> Set()))
+//   )
 ```
 
 ## TODO
@@ -118,7 +169,12 @@ def unionBruteForce(gs: Vector[Graph]): Vector[Graph] =
 println(unionBruteForce(Vector(Graph(1 -> 2, 3 -> 4), Graph(2 -> 3))))
 // Vector(Graph(Map(Vertex(1) -> Set(Vertex(2)), Vertex(2) -> Set(Vertex(3)), Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set())))
 testUnion(unionBruteForce).check()
-// + OK, passed 100 tests.
+// + union.empty: OK, proved property.
+// + union.singleton: OK, passed 100 tests.
+// + union.duplicates: OK, passed 100 tests.
+// + union.outputs disjoint: OK, passed 100 tests.
+// + union.inputs disjoint: OK, passed 100 tests.
+// + union.same edges and vertices: OK, passed 100 tests.
 ```
 
 ```scala
@@ -143,5 +199,10 @@ def unionFast(gs: Vector[Graph]): Vector[Graph] =
 println(unionFast(Vector(Graph(1 -> 2, 3 -> 4), Graph(2 -> 3))))
 // Vector(Graph(Map(Vertex(1) -> Set(Vertex(2)), Vertex(2) -> Set(Vertex(3)), Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set())))
 testUnion(unionFast).check()
-// + OK, passed 100 tests.
+// + union.empty: OK, proved property.
+// + union.singleton: OK, passed 100 tests.
+// + union.duplicates: OK, passed 100 tests.
+// + union.outputs disjoint: OK, passed 100 tests.
+// + union.inputs disjoint: OK, passed 100 tests.
+// + union.same edges and vertices: OK, passed 100 tests.
 ```

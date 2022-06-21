@@ -49,15 +49,18 @@ We can generalize the two non-trivial examples to more general laws:
 - given `gs: Vector[Graph]` such that all members have the same vertex set, `union(gs) = Vector(u)` where `u` is the union of all edge sets in `gs`
 - given `gs: Vector[Graph]` such that all members have disjoint vertex sets, `union(gs) == gs`
 
-Let's write these as a [ScalaCheck](https://scalacheck.org/) test:
+We can also say that the union of input graphs must be equal to the union of all the output graphs (that is, the total set of edges & vertices are the same).
+
+Let's write these laws as a [ScalaCheck](https://scalacheck.org/) test. For starters, we'll need a generator for graphs:
 
 ```scala mdoc
-import org.scalacheck.{Arbitrary, Gen, Prop}
+import org.scalacheck.{Arbitrary, Gen, Prop, Properties}
 
 def genGraph: Gen[Graph] = Gen.sized { size =>
+  val maxVertexId = 2 * size
   val genEdge = for
-    f <- Gen.chooseNum(0, size)
-    t <- Gen.chooseNum(0, size)
+    f <- Gen.chooseNum(0, maxVertexId)
+    t <- Gen.chooseNum(0, maxVertexId)
   yield (f, t)
   Gen.listOf(genEdge)
     .filter(_.nonEmpty)
@@ -65,30 +68,47 @@ def genGraph: Gen[Graph] = Gen.sized { size =>
 }
 
 given arbitraryGraph: Arbitrary[Graph] = Arbitrary(genGraph)
+```
 
+Given this generator, we can define various properties for each of the laws we came up with:
+
+```scala mdoc
+/** Returns true if the arguments have at least one vertex in common. */
 def overlaps(g1: Graph, g2: Graph): Boolean =
   g1.adjacencies.keySet.exists(g2.adjacencies.keySet.contains)
 
-def testUnion(union: Vector[Graph] => Vector[Graph]) =
-  Prop.secure(union(Vector.empty) == Vector.empty) :| "empty"
-    && Prop.forAll((g: Graph) => union(Vector(g)) == Vector(g)) :| "singleton"
-    && Prop.forAll((g: Graph) => union(Vector(g, g)) == Vector(g)) :| "duplicates"
-    && Prop.forAll { (gs: Vector[Graph]) =>
-      val us = union(gs)
-      us.forall(u => us.forall(u2 => (u eq u2) || !overlaps(u, u2)))
-    } :| "outputs disjoint"
-    && Prop.forAll { (gs0: Vector[Graph]) =>
-      // Re-index vertices so they don't overlap
-      val gs = gs0.zipWithIndex.map { (g, idx) =>
-        val offset = idx * 1000000
-        Graph(g.adjacencies.map((k, vs) => (Vertex(k.id + offset), vs.map(v => Vertex(v.id + offset)))))
-      }
-      union(gs) == gs
-    } :| "inputs disjoint"
-    && Prop.forAll { (gs: Vector[Graph]) =>
-      import cats.syntax.all.*
-      gs.foldMap(_.adjacencies) == union(gs).foldMap(_.adjacencies)
-    } :| "same edges and vertices"
+def testUnion(union: Vector[Graph] => Vector[Graph]) = new Properties("union"):
+  property("empty") = Prop.secure(union(Vector.empty) == Vector.empty)
+
+  property("singleton") = Prop.forAll((g: Graph) => union(Vector(g)) == Vector(g))
+
+  property("duplicates") = Prop.forAll((g: Graph) => union(Vector(g, g)) == Vector(g))
+
+  property("outputs disjoint") = Prop.forAll { (gs: Vector[Graph]) =>
+    val us = union(gs)
+    us.forall(u => us.forall(u2 => (u eq u2) || !overlaps(u, u2)))
+  }
+
+  property("inputs disjoint") = Prop.forAll { (gs0: Vector[Graph]) =>
+    // Re-index vertices so they don't overlap
+    val gs = gs0.zipWithIndex.map { (g, idx) =>
+      val offset = idx * 1000000
+      Graph(g.adjacencies.map((k, vs) => (Vertex(k.id + offset), vs.map(v => Vertex(v.id + offset)))))
+    }
+    union(gs) == gs
+  }
+
+  property("same edges and vertices") = Prop.forAll { (gs: Vector[Graph]) =>
+    import cats.syntax.all.*
+    gs.foldMap(_.adjacencies) == union(gs).foldMap(_.adjacencies)
+  }
+```
+
+Given this test definition, let's try testing with various wrong but instructive functions in place of union:
+```scala mdoc
+testUnion(identity).check()
+
+testUnion(_ => Vector.empty).check()
 ```
 
 ## TODO
