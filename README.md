@@ -53,8 +53,38 @@ And another that takes disjoint graphs as input:
 - `union(Vector(Graph(1 -> 2), Graph(3 -> 4))) == Vector(Graph(1 -> 2), Graph(3 -> 4))`
 
 We can generalize the two non-trivial examples to more general laws:
-- given `gs: Vector[Graph]` such that every member has the same vertex set, `union(gs) = Vector(u)` where `u` is the union of all edge sets in `gs`
-- given `gs: Vector[Graph]` such that all members are disjoint, `union(gs) == gs`
+- given `gs: Vector[Graph]` such that all members have the same vertex set, `union(gs) = Vector(u)` where `u` is the union of all edge sets in `gs`
+- given `gs: Vector[Graph]` such that all members have disjoint vertex sets, `union(gs) == gs`
+
+Let's write these as a [ScalaCheck](https://scalacheck.org/) test:
+
+```scala
+import org.scalacheck.{Arbitrary, Gen, Prop}
+
+def genGraph: Gen[Graph] = Gen.sized { size =>
+  val genEdge = for
+    f <- Gen.chooseNum(0, size)
+    t <- Gen.chooseNum(0, size)
+  yield (f, t)
+  Gen.listOf(genEdge)
+    .filter(_.nonEmpty)
+    .map(es => Graph(es*))
+}
+
+given arbitraryGraph: Arbitrary[Graph] = Arbitrary(genGraph)
+
+def overlaps(g1: Graph, g2: Graph): Boolean =
+  g1.adjacencies.keySet.intersect(g2.adjacencies.keySet).nonEmpty
+
+def testUnion(union: Vector[Graph] => Vector[Graph]) =
+  Prop.secure(union(Vector.empty) == Vector.empty) :| "empty"
+    && Prop.forAll((g: Graph) => union(Vector(g)) == Vector(g)) :| "singleton"
+    && Prop.forAll((g: Graph) => union(Vector(g, g)) == Vector(g)) :| "duplicates"
+    && Prop.forAll { (gs: Vector[Graph]) =>
+      val us = union(gs)
+      us.forall(u => us.forall(u2 => (u eq u2) || !overlaps(u, u2)))
+    } :| "outputs disjoint"
+```
 
 ## TODO
 
@@ -65,7 +95,22 @@ def merge(g1: Graph, g2: Graph): Graph =
 ```
 
 ```scala
-def union(gs: Vector[Graph]): Vector[Graph] =
+def unionBruteForce(gs: Vector[Graph]): Vector[Graph] =
+  val out = gs.foldLeft(Vector.empty[Graph]) { (acc, g) =>
+    val idx = acc.indexWhere(overlaps(g, _))
+    if idx < 0 then acc :+ g
+    else acc.updated(idx, merge(acc(idx), g))
+  }
+  if gs.size == out.size then out else unionBruteForce(out)
+
+println(unionBruteForce(Vector(Graph(1 -> 2, 3 -> 4), Graph(2 -> 3))))
+// Vector(Graph(Map(Vertex(1) -> Set(Vertex(2)), Vertex(2) -> Set(Vertex(3)), Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set())))
+testUnion(unionBruteForce).check()
+// + OK, passed 100 tests.
+```
+
+```scala
+def unionFast(gs: Vector[Graph]): Vector[Graph] =
   gs.foldLeft(Vector.empty[Graph], Map.empty[Vertex, Int]) { case ((acc, lookup), g) =>
     // Find indices of graphs with overlapping vertices
     val vertices = g.adjacencies.keySet
@@ -77,11 +122,14 @@ def union(gs: Vector[Graph]): Vector[Graph] =
       val otherIndices = indices - newIndex
       val merged = merge(otherIndices.foldLeft(acc(newIndex))((m, i) => merge(m, acc(i))), g)
       // Null out each other index & fix up vertex lookup table to point to new index
-      otherIndices.foldLeft((acc.updated(newIndex, merged), lookup)) { case ((newAcc, newLookup), idx) =>
+      val newLookup = lookup ++ vertices.iterator.map(_ -> newIndex)
+      otherIndices.foldLeft((acc.updated(newIndex, merged), newLookup)) { case ((newAcc, newLookup), idx) =>
         newAcc.updated(idx, null) -> (newLookup ++ acc(idx).adjacencies.keySet.iterator.map(_ -> newIndex))
       }
   }(0).filterNot(_ eq null)
 
-println(union(Vector(Graph(1 -> 2, 3 -> 4), Graph(2 -> 3))))
+println(unionFast(Vector(Graph(1 -> 2, 3 -> 4), Graph(2 -> 3))))
 // Vector(Graph(Map(Vertex(1) -> Set(Vertex(2)), Vertex(2) -> Set(Vertex(3)), Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set())))
+testUnion(unionFast).check()
+// + OK, passed 100 tests.
 ```
