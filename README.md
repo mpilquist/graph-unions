@@ -10,7 +10,14 @@ For starters, we'll need a representation of a graph. One common implementation 
 
 ```scala
 case class Vertex(id: Int)
-case class Graph(adjacencies: Map[Vertex, Set[Vertex]])
+case class Graph(adjacencies: Map[Vertex, Set[Vertex]]):
+  override def toString: String =
+    adjacencies
+      .toVector
+      .sortBy((k, _) => k.id)
+      .map((k, vs) => (k, vs.toVector.sortBy(_.id)))
+      .map((k, vs) => s"""${k.id} -> {${vs.map(_.id).mkString("\n")}}""")
+      .mkString("Graph(", ", ", ")")
 
 object Graph:
   def apply(edges: (Int, Int)*): Graph =
@@ -138,33 +145,30 @@ def runUnionTest(union: Vector[Graph] => Vector[Graph]): Unit =
 runUnionTest(identity)
 // + union.empty: OK, proved property.
 // + union.singleton: OK, passed 1000 tests.
-// failing seed for union.duplicates is Frjg-J3a7cXWSKD76s3zukOqALXAKhPgR2JZwpHENfK=
+// failing seed for union.duplicates is 3HCNKrGMMZKskF3EJSsL3ufUaIPIP5xfh27-nvolT-P=
 // ! union.duplicates: Falsified after 0 passed tests.
-// > ARG_0: Graph(Map(Vertex(1) -> Set(Vertex(2)), Vertex(2) -> Set()))
-// failing seed for union.outputs disjoint is H-MyPjS1EB-tp5jhbnyGMDh7W-cOyN4xIfOWfsn5o2P=
-// ! union.outputs disjoint: Falsified after 22 passed tests.
-// > ARG_0: Vector(Graph(Map(Vertex(2) -> Set(Vertex(0)), Vertex(0) -> Set(), 
-//   Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set())), Graph(Map(Vertex(1) ->
-//    Set(Vertex(0)), Vertex(0) -> Set(), Vertex(4) -> Set(Vertex(0)))))
+// > ARG_0: Graph(0 -> {}, 1 -> {0})
+// failing seed for union.outputs disjoint is 6RH-JDgM39HynyqnR8lmwDE5n8ctQ_DfuC6O3gJFoUG=
+// ! union.outputs disjoint: Falsified after 16 passed tests.
+// > ARG_0: Vector(Graph(0 -> {}, 1 -> {}, 2 -> {1}), Graph(0 -> {}))
 // + union.inputs disjoint: OK, passed 1000 tests.
 // + union.same edges and vertices: OK, passed 1000 tests.
 
 runUnionTest(_ => Vector.empty)
 // + union.empty: OK, proved property.
-// failing seed for union.singleton is wWXKEtBAmu7SYDxBi8htqibjhb2gYjEctRjAoIVpHGK=
+// failing seed for union.singleton is ewTp3wSuKarPc5I3ffR_2O5CGFHKhe5xfJVxqcLycBO=
 // ! union.singleton: Falsified after 0 passed tests.
-// > ARG_0: Graph(Map(Vertex(1) -> Set()))
-// failing seed for union.duplicates is _fft-NsqnQdRhXIJ1X1fzu_cIikMDYv8XtAN45X_ibG=
+// > ARG_0: Graph(0 -> {}, 2 -> {0})
+// failing seed for union.duplicates is 24LIkwoUIOa_PgpasXXqcJ05sl3xTytNTIUSDmFZKeG=
 // ! union.duplicates: Falsified after 0 passed tests.
-// > ARG_0: Graph(Map(Vertex(2) -> Set(Vertex(0)), Vertex(0) -> Set()))
+// > ARG_0: Graph(0 -> {})
 // + union.outputs disjoint: OK, passed 1000 tests.
-// failing seed for union.inputs disjoint is Ww0w2kmEt5igQveWJiXNi6BkoaGViXE-b0T1-Rgc3zE=
+// failing seed for union.inputs disjoint is _PlUBSBZoBks0X_EA65eo5DYuYO9r9-MFqcA8NltvuI=
 // ! union.inputs disjoint: Falsified after 7 passed tests.
-// > ARG_0: Vector(Graph(Map(Vertex(1) -> Set(Vertex(0)), Vertex(0) -> Set()))
-//   )
-// failing seed for union.same edges and vertices is uNJJ9os5Nyqtscd5yyFvXjgIQ1pBNgpeLEozciYM0QK=
+// > ARG_0: Vector(Graph(0 -> {2}, 2 -> {}))
+// failing seed for union.same edges and vertices is wbQf5TGDmqCNbVQ8p3hFmBu63Rr8zsZyZkiNnacO0DL=
 // ! union.same edges and vertices: Falsified after 5 passed tests.
-// > ARG_0: Vector(Graph(Map(Vertex(0) -> Set())))
+// > ARG_0: Vector(Graph(1 -> {}, 2 -> {1}))
 ```
 
 ## A First Solution
@@ -184,14 +188,14 @@ An initial test look promising:
 
 ```scala
 println(unionFirst(Vector(Graph(1 -> 2, 3 -> 4), Graph(2 -> 3))))
-// Vector(Graph(Map(Vertex(1) -> Set(Vertex(2)), Vertex(2) -> Set(Vertex(3)), Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set())))
+// Vector(Graph(1 -> {2}, 2 -> {3}, 3 -> {4}, 4 -> {}))
 ```
 
 A more slightly more complicated test reveals an error though:
 
 ```scala
 println(unionFirst(Vector(Graph(1 -> 2), Graph(3 -> 4), Graph(2 -> 3))))
-// Vector(Graph(Map(Vertex(2) -> Set(Vertex(3)), Vertex(3) -> Set(), Vertex(1) -> Set(Vertex(2)))), Graph(Map(Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set())))
+// Vector(Graph(1 -> {2}, 2 -> {3}, 3 -> {}), Graph(3 -> {4}, 4 -> {}))
 ```
 
 When the second input graph is processed, it's disjoint with all the graphs processed so far (i.e., the first graph). When the third graph is processed, it's merged with the first, resulting in an output of two graphs. But those two graphs share a common vertex of 3. It seems that each time we merge graphs, we need to reconsider whether the disjoint set is still disjoint. More on that in a moment. First, let's run our test on this implementation and see if it also finds a counterexample:
@@ -201,12 +205,16 @@ runUnionTest(unionFirst)
 // + union.empty: OK, proved property.
 // + union.singleton: OK, passed 1000 tests.
 // + union.duplicates: OK, passed 1000 tests.
-// failing seed for union.outputs disjoint is ihZSYBj6sVP3iaLFc1zBByHR4Z3egHeHukSyp4sdwkL=
-// ! union.outputs disjoint: Falsified after 42 passed tests.
-// > ARG_0: Vector(Graph(Map(Vertex(3) -> Set(Vertex(2), Vertex(1)), Vertex(2)
-//    -> Set(), Vertex(1) -> Set())), Graph(Map(Vertex(0) -> Set(Vertex(7), Ve
-//   rtex(8)), Vertex(7) -> Set(), Vertex(8) -> Set())), Graph(Map(Vertex(1) -
-//   > Set(Vertex(0)), Vertex(0) -> Set(Vertex(5)), Vertex(5) -> Set())))
+// failing seed for union.outputs disjoint is mitQqObXy09o6jqbJJBfWTAa3SjpqB7C9E6klEEratL=
+// ! union.outputs disjoint: Falsified after 72 passed tests.
+// > ARG_0: Vector(Graph(1 -> {}), Graph(0 -> {10}, 5 -> {}, 7 -> {13
+// 14}, 10 -> {}, 13 -> {}, 14 -> {5}), Graph(1 -> {9}, 5 -> {1}, 9 -> {}, 11 
+//   -> {14}, 13 -> {14}, 14 -> {}))
+// > ARG_0_ORIGINAL: Vector(Graph(1 -> {}), Graph(0 -> {10}, 5 -> {}, 7 -> {13
+// 14}, 10 -> {}, 13 -> {}, 14 -> {5}), Graph(1 -> {9}, 5 -> {1}, 9 -> {}, 11 
+//   -> {14}, 13 -> {14}, 14 -> {}), Graph(0 -> {}, 1 -> {}, 2 -> {1}, 3 -> {}
+//   , 4 -> {8}, 7 -> {0}, 8 -> {}, 9 -> {0}, 14 -> {3}), Graph(0 -> {1}, 1 ->
+//    {}, 2 -> {}, 6 -> {9}, 9 -> {}, 13 -> {2}))
 // + union.inputs disjoint: OK, passed 1000 tests.
 // + union.same edges and vertices: OK, passed 1000 tests.
 ```
@@ -230,7 +238,7 @@ This version works with our problematice example:
 
 ```scala
 println(unionRecursive(Vector(Graph(1 -> 2), Graph(3 -> 4), Graph(2 -> 3))))
-// Vector(Graph(Map(Vertex(2) -> Set(Vertex(3)), Vertex(3) -> Set(Vertex(4)), Vertex(1) -> Set(Vertex(2)), Vertex(4) -> Set())))
+// Vector(Graph(1 -> {2}, 2 -> {3}, 3 -> {4}, 4 -> {}))
 ```
 
 And it passes all of our laws:

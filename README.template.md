@@ -10,7 +10,14 @@ For starters, we'll need a representation of a graph. One common implementation 
 
 ```scala mdoc
 case class Vertex(id: Int)
-case class Graph(adjacencies: Map[Vertex, Set[Vertex]])
+case class Graph(adjacencies: Map[Vertex, Set[Vertex]]):
+  override def toString: String =
+    adjacencies
+      .toVector
+      .sortBy((k, _) => k.id)
+      .map((k, vs) => (k, vs.toVector.sortBy(_.id)))
+      .map((k, vs) => s"""${k.id} -> {${vs.map(_.id).mkString("\n")}}""")
+      .mkString("Graph(", ", ", ")")
 
 object Graph:
   def apply(edges: (Int, Int)*): Graph =
