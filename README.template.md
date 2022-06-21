@@ -100,7 +100,26 @@ def testUnion(union: Vector[Graph] => Vector[Graph]) = new Properties("union"):
 
   property("same edges and vertices") = Prop.forAll { (gs: Vector[Graph]) =>
     import cats.syntax.all.*
+    // adjacencies is a Map[Vertex, Set[Vertex]] so we can merge
+    // all edges & vertices by folding with the map monoid
     gs.foldMap(_.adjacencies) == union(gs).foldMap(_.adjacencies)
+  }
+```
+
+Note how the union of all edges & vertices was calculated in the final property -- using `foldMap`. We could further simplify this by defining a `Monoid[Graph]` instance and using `combineAll` in place of `foldMap(_.adjacencies)`:
+
+```scala mdoc
+import cats.Monoid
+import cats.syntax.all.*
+
+given Monoid[Graph] with
+  def empty = Graph()
+  def combine(x: Graph, y: Graph): Graph =
+    Graph(x.adjacencies |+| y.adjacencies)
+
+def alternateDefinition(union: Vector[Graph] => Vector[Graph]): Prop =
+  Prop.forAll { (gs: Vector[Graph]) =>
+    gs.combineAll == union(gs).combineAll
   }
 ```
 
@@ -111,26 +130,67 @@ testUnion(identity).check()
 testUnion(_ => Vector.empty).check()
 ```
 
-## TODO
+## A First Solution
+
+As an initial attempt at implementing `union`, let's try folding over each input graph, accumulating disjoint graphs. For each input graph, we can search the disjoint graphs, looking for overlap. If we find an overlap, then we replace that element with the merge of the input and the old element. Otherwise, we add the new graph as a new disjoint graph.
 
 ```scala mdoc
-def merge(g1: Graph, g2: Graph): Graph =
-  import cats.syntax.all.*
-  Graph(g1.adjacencies |+| g2.adjacencies)
+def unionFirst(gs: Vector[Graph]): Vector[Graph] =
+  gs.foldLeft(Vector.empty[Graph]) { (acc, g) =>
+    val idx = acc.indexWhere(overlaps(g, _))
+    if idx < 0 then acc :+ g
+    else acc.updated(idx, acc(idx) |+| g)
+  }
 ```
 
+An initial test look promising:
+
 ```scala mdoc
-def unionBruteForce(gs: Vector[Graph]): Vector[Graph] =
+println(unionFirst(Vector(Graph(1 -> 2, 3 -> 4), Graph(2 -> 3))))
+```
+
+A more slightly more complicated test reveals an error though:
+
+```scala mdoc
+println(unionFirst(Vector(Graph(1 -> 2), Graph(3 -> 4), Graph(2 -> 3))))
+```
+
+When the second input graph is processed, it's disjoint with all the graphs processed so far (i.e., the first graph). When the third graph is processed, it's merged with the first, resulting in an output of two graphs. But those two graphs share a common vertex of 3. It seems that each time we merge graphs, we need to reconsider whether the disjoint set is still disjoint. More on that in a moment. First, let's run our test on this implementation and see if it also finds a counterexample:
+
+```scala mdoc
+testUnion(unionFirst).check()
+```
+
+Okay, so when we merge a graph in to the disjoint set, two entries that were previously disjoint may no longer be disjoint. We could fix our issue by recursively calling our union function after merging -- i.e. `unionFirst(acc.updated(idx, acc(idx) |+| g))` -- but doing so wouldn't be tail recursive. Instead, we could run the full fold and when it completes, check if we've done any merges. If so, we recurse and otherwise we return. We can test if we've done merges by comparing the size of the input to the size of the output.
+
+
+```scala mdoc
+def unionRecursive(gs: Vector[Graph]): Vector[Graph] =
   val out = gs.foldLeft(Vector.empty[Graph]) { (acc, g) =>
     val idx = acc.indexWhere(overlaps(g, _))
     if idx < 0 then acc :+ g
-    else acc.updated(idx, merge(acc(idx), g))
+    else acc.updated(idx, acc(idx) |+| g)
   }
-  if gs.size == out.size then out else unionBruteForce(out)
-
-println(unionBruteForce(Vector(Graph(1 -> 2, 3 -> 4), Graph(2 -> 3))))
-testUnion(unionBruteForce).check()
+  if gs.size == out.size then out else unionRecursive(out)
 ```
+
+This is the same implementation as `unionFirst` except the final statement, which compares the size of the input to the size of the output. If they are the same, then we've done no merges and we return the result. Otherwise, we recurse on the output.
+
+This version works with our problematice example:
+
+```scala mdoc
+println(unionRecursive(Vector(Graph(1 -> 2), Graph(3 -> 4), Graph(2 -> 3))))
+```
+
+And it passes all of our laws:
+
+```scala mdoc
+testUnion(unionRecursive).check()
+```
+
+## A Faster Solution
+
+TODO
 
 ```scala mdoc
 def unionFast(gs: Vector[Graph]): Vector[Graph] =
@@ -143,7 +203,7 @@ def unionFast(gs: Vector[Graph]): Vector[Graph] =
       // Target index is the minimum index with
       val newIndex = indices.min
       val otherIndices = indices - newIndex
-      val merged = merge(otherIndices.foldLeft(acc(newIndex))((m, i) => merge(m, acc(i))), g)
+      val merged = otherIndices.foldLeft(acc(newIndex))((m, i) => m |+| acc(i)) |+| g
       // Null out each other index & fix up vertex lookup table to point to new index
       val newLookup = lookup ++ vertices.iterator.map(_ -> newIndex)
       otherIndices.foldLeft((acc.updated(newIndex, merged), newLookup)) { case ((newAcc, newLookup), idx) =>
@@ -151,6 +211,6 @@ def unionFast(gs: Vector[Graph]): Vector[Graph] =
       }
   }(0).filterNot(_ eq null)
 
-println(unionFast(Vector(Graph(1 -> 2, 3 -> 4), Graph(2 -> 3))))
 testUnion(unionFast).check()
 ```
+

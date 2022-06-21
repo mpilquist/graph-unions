@@ -107,7 +107,26 @@ def testUnion(union: Vector[Graph] => Vector[Graph]) = new Properties("union"):
 
   property("same edges and vertices") = Prop.forAll { (gs: Vector[Graph]) =>
     import cats.syntax.all.*
+    // adjacencies is a Map[Vertex, Set[Vertex]] so we can merge
+    // all edges & vertices by folding with the map monoid
     gs.foldMap(_.adjacencies) == union(gs).foldMap(_.adjacencies)
+  }
+```
+
+Note how the union of all edges & vertices was calculated in the final property -- using `foldMap`. We could further simplify this by defining a `Monoid[Graph]` instance and using `combineAll` in place of `foldMap(_.adjacencies)`:
+
+```scala
+import cats.Monoid
+import cats.syntax.all.*
+
+given Monoid[Graph] with
+  def empty = Graph()
+  def combine(x: Graph, y: Graph): Graph =
+    Graph(x.adjacencies |+| y.adjacencies)
+
+def alternateDefinition(union: Vector[Graph] => Vector[Graph]): Prop =
+  Prop.forAll { (gs: Vector[Graph]) =>
+    gs.combineAll == union(gs).combineAll
   }
 ```
 
@@ -116,59 +135,67 @@ Given this test definition, let's try testing with various wrong but instructive
 testUnion(identity).check()
 // + union.empty: OK, proved property.
 // + union.singleton: OK, passed 100 tests.
-// failing seed for union.duplicates is jB35C0lmMQPZNoShcobR8U01MAOJ4ZP389DrhAwHtwP=
+// failing seed for union.duplicates is NZOPbCUx94dKkILXjMh9mscZqthZiWuOtiBl77tk8HM=
 // ! union.duplicates: Falsified after 0 passed tests.
-// > ARG_0: Graph(Map(Vertex(0) -> Set(Vertex(1)), Vertex(1) -> Set(), Vertex(
-//   8) -> Set()))
-// failing seed for union.outputs disjoint is e9n31ERwwDNUtqnxF_j_njV7Ya9RiOJiGGqFvPbC3ED=
-// ! union.outputs disjoint: Falsified after 5 passed tests.
-// > ARG_0: Vector(Graph(HashMap(Vertex(6) -> Set(), Vertex(10) -> Set(), Vert
-//   ex(4) -> Set(Vertex(6)), Vertex(9) -> Set(Vertex(5), Vertex(10)), Vertex(
-//   5) -> Set())), Graph(Map(Vertex(0) -> Set(Vertex(10)), Vertex(10) -> Set(
-//   Vertex(5)), Vertex(5) -> Set())))
+// > ARG_0: Graph(Map(Vertex(1) -> Set(Vertex(0)), Vertex(0) -> Set()))
+// failing seed for union.outputs disjoint is grZ0VNqnRZbCVw58MOxEm4AQTiLE9A5WdBRZyaCXrPF=
+// ! union.outputs disjoint: Falsified after 2 passed tests.
+// > ARG_0: Vector(Graph(Map(Vertex(1) -> Set(Vertex(3)), Vertex(3) -> Set(), 
+//   Vertex(0) -> Set(Vertex(1)))), Graph(Map(Vertex(1) -> Set(Vertex(4)), Ver
+//   tex(4) -> Set())))
 // + union.inputs disjoint: OK, passed 100 tests.
 // + union.same edges and vertices: OK, passed 100 tests.
 
 testUnion(_ => Vector.empty).check()
 // + union.empty: OK, proved property.
-// failing seed for union.singleton is 6eqSjmGm5CD2gCtN7CqG4jytjud17gjLp_cfJ95Sc1E=
+// failing seed for union.singleton is suf0_OOzVnELIzdY1Q7MlkdGnLfxeRce7KtPQ1dERoF=
 // ! union.singleton: Falsified after 0 passed tests.
-// > ARG_0: Graph(Map(Vertex(0) -> Set()))
-// failing seed for union.duplicates is SVZzEjVkcvvTfDbmZVDMMerpAJzX7i-C6ksbXRVCHmK=
+// > ARG_0: Graph(Map(Vertex(1) -> Set(), Vertex(6) -> Set(Vertex(3)), Vertex(
+//   3) -> Set(), Vertex(0) -> Set()))
+// failing seed for union.duplicates is 6P2nKX7NbidY5dotRmAXL2lQEmtLcSDolrm1WF_j1KB=
 // ! union.duplicates: Falsified after 0 passed tests.
-// > ARG_0: Graph(Map(Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set(Vertex(1))
-//   , Vertex(1) -> Set()))
+// > ARG_0: Graph(Map(Vertex(1) -> Set(Vertex(0)), Vertex(0) -> Set()))
 // + union.outputs disjoint: OK, passed 100 tests.
-// failing seed for union.inputs disjoint is 5wlfN7v2x3k0mDcc93v5E6dIz-SXcx2y_i272FNk7TF=
+// failing seed for union.inputs disjoint is xYg1KsquZltaU_wVzZK07DIetB7eMLTdRTo22gunptF=
 // ! union.inputs disjoint: Falsified after 1 passed tests.
-// > ARG_0: Vector(Graph(Map(Vertex(1) -> Set(Vertex(2)), Vertex(2) -> Set()))
-//   )
-// failing seed for union.same edges and vertices is 8eXXYmFq1hqGUTaL0zbqzG7STzHypKJs39K6ZYqfpyO=
-// ! union.same edges and vertices: Falsified after 1 passed tests.
+// > ARG_0: Vector(Graph(Map(Vertex(0) -> Set())))
+// failing seed for union.same edges and vertices is zbvtL24xwgFEtt8Yg8GXSM9m__2cd9iWbYu0ulylMbA=
+// ! union.same edges and vertices: Falsified after 2 passed tests.
 // > ARG_0: Vector(Graph(Map(Vertex(0) -> Set(Vertex(1)), Vertex(1) -> Set()))
 //   )
 ```
 
-## TODO
+## A First Solution
+
+As an initial attempt at implementing `union`, let's try folding over each input graph, accumulating disjoint graphs. For each input graph, we can search the disjoint graphs, looking for overlap. If we find an overlap, then we replace that element with the merge of the input and the old element. Otherwise, we add the new graph as a new disjoint graph.
 
 ```scala
-def merge(g1: Graph, g2: Graph): Graph =
-  import cats.syntax.all.*
-  Graph(g1.adjacencies |+| g2.adjacencies)
-```
-
-```scala
-def unionBruteForce(gs: Vector[Graph]): Vector[Graph] =
-  val out = gs.foldLeft(Vector.empty[Graph]) { (acc, g) =>
+def unionFirst(gs: Vector[Graph]): Vector[Graph] =
+  gs.foldLeft(Vector.empty[Graph]) { (acc, g) =>
     val idx = acc.indexWhere(overlaps(g, _))
     if idx < 0 then acc :+ g
-    else acc.updated(idx, merge(acc(idx), g))
+    else acc.updated(idx, acc(idx) |+| g)
   }
-  if gs.size == out.size then out else unionBruteForce(out)
+```
 
-println(unionBruteForce(Vector(Graph(1 -> 2, 3 -> 4), Graph(2 -> 3))))
+An initial test look promising:
+
+```scala
+println(unionFirst(Vector(Graph(1 -> 2, 3 -> 4), Graph(2 -> 3))))
 // Vector(Graph(Map(Vertex(1) -> Set(Vertex(2)), Vertex(2) -> Set(Vertex(3)), Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set())))
-testUnion(unionBruteForce).check()
+```
+
+A more slightly more complicated test reveals an error though:
+
+```scala
+println(unionFirst(Vector(Graph(1 -> 2), Graph(3 -> 4), Graph(2 -> 3))))
+// Vector(Graph(Map(Vertex(2) -> Set(Vertex(3)), Vertex(3) -> Set(), Vertex(1) -> Set(Vertex(2)))), Graph(Map(Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set())))
+```
+
+When the second input graph is processed, it's disjoint with all the graphs processed so far (i.e., the first graph). When the third graph is processed, it's merged with the first, resulting in an output of two graphs. But those two graphs share a common vertex of 3. It seems that each time we merge graphs, we need to reconsider whether the disjoint set is still disjoint. More on that in a moment. First, let's run our test on this implementation and see if it also finds a counterexample:
+
+```scala
+testUnion(unionFirst).check()
 // + union.empty: OK, proved property.
 // + union.singleton: OK, passed 100 tests.
 // + union.duplicates: OK, passed 100 tests.
@@ -176,6 +203,44 @@ testUnion(unionBruteForce).check()
 // + union.inputs disjoint: OK, passed 100 tests.
 // + union.same edges and vertices: OK, passed 100 tests.
 ```
+
+Okay, so when we merge a graph in to the disjoint set, two entries that were previously disjoint may no longer be disjoint. We could fix our issue by recursively calling our union function after merging -- i.e. `unionFirst(acc.updated(idx, acc(idx) |+| g))` -- but doing so wouldn't be tail recursive. Instead, we could run the full fold and when it completes, check if we've done any merges. If so, we recurse and otherwise we return. We can test if we've done merges by comparing the size of the input to the size of the output.
+
+
+```scala
+def unionRecursive(gs: Vector[Graph]): Vector[Graph] =
+  val out = gs.foldLeft(Vector.empty[Graph]) { (acc, g) =>
+    val idx = acc.indexWhere(overlaps(g, _))
+    if idx < 0 then acc :+ g
+    else acc.updated(idx, acc(idx) |+| g)
+  }
+  if gs.size == out.size then out else unionRecursive(out)
+```
+
+This is the same implementation as `unionFirst` except the final statement, which compares the size of the input to the size of the output. If they are the same, then we've done no merges and we return the result. Otherwise, we recurse on the output.
+
+This version works with our problematice example:
+
+```scala
+println(unionRecursive(Vector(Graph(1 -> 2), Graph(3 -> 4), Graph(2 -> 3))))
+// Vector(Graph(Map(Vertex(2) -> Set(Vertex(3)), Vertex(3) -> Set(Vertex(4)), Vertex(1) -> Set(Vertex(2)), Vertex(4) -> Set())))
+```
+
+And it passes all of our laws:
+
+```scala
+testUnion(unionRecursive).check()
+// + union.empty: OK, proved property.
+// + union.singleton: OK, passed 100 tests.
+// + union.duplicates: OK, passed 100 tests.
+// + union.outputs disjoint: OK, passed 100 tests.
+// + union.inputs disjoint: OK, passed 100 tests.
+// + union.same edges and vertices: OK, passed 100 tests.
+```
+
+## A Faster Solution
+
+TODO
 
 ```scala
 def unionFast(gs: Vector[Graph]): Vector[Graph] =
@@ -188,7 +253,7 @@ def unionFast(gs: Vector[Graph]): Vector[Graph] =
       // Target index is the minimum index with
       val newIndex = indices.min
       val otherIndices = indices - newIndex
-      val merged = merge(otherIndices.foldLeft(acc(newIndex))((m, i) => merge(m, acc(i))), g)
+      val merged = otherIndices.foldLeft(acc(newIndex))((m, i) => m |+| acc(i)) |+| g
       // Null out each other index & fix up vertex lookup table to point to new index
       val newLookup = lookup ++ vertices.iterator.map(_ -> newIndex)
       otherIndices.foldLeft((acc.updated(newIndex, merged), newLookup)) { case ((newAcc, newLookup), idx) =>
@@ -196,8 +261,6 @@ def unionFast(gs: Vector[Graph]): Vector[Graph] =
       }
   }(0).filterNot(_ eq null)
 
-println(unionFast(Vector(Graph(1 -> 2, 3 -> 4), Graph(2 -> 3))))
-// Vector(Graph(Map(Vertex(1) -> Set(Vertex(2)), Vertex(2) -> Set(Vertex(3)), Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set())))
 testUnion(unionFast).check()
 // + union.empty: OK, proved property.
 // + union.singleton: OK, passed 100 tests.
@@ -206,3 +269,4 @@ testUnion(unionFast).check()
 // + union.inputs disjoint: OK, passed 100 tests.
 // + union.same edges and vertices: OK, passed 100 tests.
 ```
+
