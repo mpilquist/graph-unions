@@ -67,7 +67,7 @@ def genGraph: Gen[Graph] = Gen.sized { size =>
 given arbitraryGraph: Arbitrary[Graph] = Arbitrary(genGraph)
 
 def overlaps(g1: Graph, g2: Graph): Boolean =
-  g1.adjacencies.keySet.intersect(g2.adjacencies.keySet).nonEmpty
+  g1.adjacencies.keySet.exists(g2.adjacencies.keySet.contains)
 
 def testUnion(union: Vector[Graph] => Vector[Graph]) =
   Prop.secure(union(Vector.empty) == Vector.empty) :| "empty"
@@ -78,12 +78,17 @@ def testUnion(union: Vector[Graph] => Vector[Graph]) =
       us.forall(u => us.forall(u2 => (u eq u2) || !overlaps(u, u2)))
     } :| "outputs disjoint"
     && Prop.forAll { (gs0: Vector[Graph]) =>
+      // Re-index vertices so they don't overlap
       val gs = gs0.zipWithIndex.map { (g, idx) =>
         val offset = idx * 1000000
         Graph(g.adjacencies.map((k, vs) => (Vertex(k.id + offset), vs.map(v => Vertex(v.id + offset)))))
       }
       union(gs) == gs
     } :| "inputs disjoint"
+    && Prop.forAll { (gs: Vector[Graph]) =>
+      import cats.syntax.all.*
+      gs.foldMap(_.adjacencies) == union(gs).foldMap(_.adjacencies)
+    } :| "same edges and vertices"
 ```
 
 ## TODO
