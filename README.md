@@ -61,7 +61,7 @@ We can also say that the union of input graphs must be equal to the union of all
 Let's write these laws as a [ScalaCheck](https://scalacheck.org/) test. For starters, we'll need a generator for graphs:
 
 ```scala
-import org.scalacheck.{Arbitrary, Gen, Prop, Properties}
+import org.scalacheck.{Arbitrary, Gen, Prop, Properties, Test}
 
 def genGraph: Gen[Graph] = Gen.sized { size =>
   val maxVertexId = 2 * size
@@ -132,37 +132,39 @@ def alternateDefinition(union: Vector[Graph] => Vector[Graph]): Prop =
 
 Given this test definition, let's try testing with various wrong but instructive functions in place of union:
 ```scala
-testUnion(identity).check()
-// + union.empty: OK, proved property.
-// + union.singleton: OK, passed 100 tests.
-// failing seed for union.duplicates is NZOPbCUx94dKkILXjMh9mscZqthZiWuOtiBl77tk8HM=
-// ! union.duplicates: Falsified after 0 passed tests.
-// > ARG_0: Graph(Map(Vertex(1) -> Set(Vertex(0)), Vertex(0) -> Set()))
-// failing seed for union.outputs disjoint is grZ0VNqnRZbCVw58MOxEm4AQTiLE9A5WdBRZyaCXrPF=
-// ! union.outputs disjoint: Falsified after 2 passed tests.
-// > ARG_0: Vector(Graph(Map(Vertex(1) -> Set(Vertex(3)), Vertex(3) -> Set(), 
-//   Vertex(0) -> Set(Vertex(1)))), Graph(Map(Vertex(1) -> Set(Vertex(4)), Ver
-//   tex(4) -> Set())))
-// + union.inputs disjoint: OK, passed 100 tests.
-// + union.same edges and vertices: OK, passed 100 tests.
+def runUnionTest(union: Vector[Graph] => Vector[Graph]): Unit =
+  testUnion(union).check(Test.Parameters.default.withMinSuccessfulTests(1000))
 
-testUnion(_ => Vector.empty).check()
+runUnionTest(identity)
 // + union.empty: OK, proved property.
-// failing seed for union.singleton is suf0_OOzVnELIzdY1Q7MlkdGnLfxeRce7KtPQ1dERoF=
-// ! union.singleton: Falsified after 0 passed tests.
-// > ARG_0: Graph(Map(Vertex(1) -> Set(), Vertex(6) -> Set(Vertex(3)), Vertex(
-//   3) -> Set(), Vertex(0) -> Set()))
-// failing seed for union.duplicates is 6P2nKX7NbidY5dotRmAXL2lQEmtLcSDolrm1WF_j1KB=
+// + union.singleton: OK, passed 1000 tests.
+// failing seed for union.duplicates is Frjg-J3a7cXWSKD76s3zukOqALXAKhPgR2JZwpHENfK=
 // ! union.duplicates: Falsified after 0 passed tests.
-// > ARG_0: Graph(Map(Vertex(1) -> Set(Vertex(0)), Vertex(0) -> Set()))
-// + union.outputs disjoint: OK, passed 100 tests.
-// failing seed for union.inputs disjoint is xYg1KsquZltaU_wVzZK07DIetB7eMLTdRTo22gunptF=
-// ! union.inputs disjoint: Falsified after 1 passed tests.
-// > ARG_0: Vector(Graph(Map(Vertex(0) -> Set())))
-// failing seed for union.same edges and vertices is zbvtL24xwgFEtt8Yg8GXSM9m__2cd9iWbYu0ulylMbA=
-// ! union.same edges and vertices: Falsified after 2 passed tests.
-// > ARG_0: Vector(Graph(Map(Vertex(0) -> Set(Vertex(1)), Vertex(1) -> Set()))
+// > ARG_0: Graph(Map(Vertex(1) -> Set(Vertex(2)), Vertex(2) -> Set()))
+// failing seed for union.outputs disjoint is H-MyPjS1EB-tp5jhbnyGMDh7W-cOyN4xIfOWfsn5o2P=
+// ! union.outputs disjoint: Falsified after 22 passed tests.
+// > ARG_0: Vector(Graph(Map(Vertex(2) -> Set(Vertex(0)), Vertex(0) -> Set(), 
+//   Vertex(3) -> Set(Vertex(4)), Vertex(4) -> Set())), Graph(Map(Vertex(1) ->
+//    Set(Vertex(0)), Vertex(0) -> Set(), Vertex(4) -> Set(Vertex(0)))))
+// + union.inputs disjoint: OK, passed 1000 tests.
+// + union.same edges and vertices: OK, passed 1000 tests.
+
+runUnionTest(_ => Vector.empty)
+// + union.empty: OK, proved property.
+// failing seed for union.singleton is wWXKEtBAmu7SYDxBi8htqibjhb2gYjEctRjAoIVpHGK=
+// ! union.singleton: Falsified after 0 passed tests.
+// > ARG_0: Graph(Map(Vertex(1) -> Set()))
+// failing seed for union.duplicates is _fft-NsqnQdRhXIJ1X1fzu_cIikMDYv8XtAN45X_ibG=
+// ! union.duplicates: Falsified after 0 passed tests.
+// > ARG_0: Graph(Map(Vertex(2) -> Set(Vertex(0)), Vertex(0) -> Set()))
+// + union.outputs disjoint: OK, passed 1000 tests.
+// failing seed for union.inputs disjoint is Ww0w2kmEt5igQveWJiXNi6BkoaGViXE-b0T1-Rgc3zE=
+// ! union.inputs disjoint: Falsified after 7 passed tests.
+// > ARG_0: Vector(Graph(Map(Vertex(1) -> Set(Vertex(0)), Vertex(0) -> Set()))
 //   )
+// failing seed for union.same edges and vertices is uNJJ9os5Nyqtscd5yyFvXjgIQ1pBNgpeLEozciYM0QK=
+// ! union.same edges and vertices: Falsified after 5 passed tests.
+// > ARG_0: Vector(Graph(Map(Vertex(0) -> Set())))
 ```
 
 ## A First Solution
@@ -195,13 +197,18 @@ println(unionFirst(Vector(Graph(1 -> 2), Graph(3 -> 4), Graph(2 -> 3))))
 When the second input graph is processed, it's disjoint with all the graphs processed so far (i.e., the first graph). When the third graph is processed, it's merged with the first, resulting in an output of two graphs. But those two graphs share a common vertex of 3. It seems that each time we merge graphs, we need to reconsider whether the disjoint set is still disjoint. More on that in a moment. First, let's run our test on this implementation and see if it also finds a counterexample:
 
 ```scala
-testUnion(unionFirst).check()
+runUnionTest(unionFirst)
 // + union.empty: OK, proved property.
-// + union.singleton: OK, passed 100 tests.
-// + union.duplicates: OK, passed 100 tests.
-// + union.outputs disjoint: OK, passed 100 tests.
-// + union.inputs disjoint: OK, passed 100 tests.
-// + union.same edges and vertices: OK, passed 100 tests.
+// + union.singleton: OK, passed 1000 tests.
+// + union.duplicates: OK, passed 1000 tests.
+// failing seed for union.outputs disjoint is ihZSYBj6sVP3iaLFc1zBByHR4Z3egHeHukSyp4sdwkL=
+// ! union.outputs disjoint: Falsified after 42 passed tests.
+// > ARG_0: Vector(Graph(Map(Vertex(3) -> Set(Vertex(2), Vertex(1)), Vertex(2)
+//    -> Set(), Vertex(1) -> Set())), Graph(Map(Vertex(0) -> Set(Vertex(7), Ve
+//   rtex(8)), Vertex(7) -> Set(), Vertex(8) -> Set())), Graph(Map(Vertex(1) -
+//   > Set(Vertex(0)), Vertex(0) -> Set(Vertex(5)), Vertex(5) -> Set())))
+// + union.inputs disjoint: OK, passed 1000 tests.
+// + union.same edges and vertices: OK, passed 1000 tests.
 ```
 
 Okay, so when we merge a graph in to the disjoint set, two entries that were previously disjoint may no longer be disjoint. We could fix our issue by recursively calling our union function after merging -- i.e. `unionFirst(acc.updated(idx, acc(idx) |+| g))` -- but doing so wouldn't be tail recursive. Instead, we could run the full fold and when it completes, check if we've done any merges. If so, we recurse and otherwise we return. We can test if we've done merges by comparing the size of the input to the size of the output.
@@ -229,13 +236,13 @@ println(unionRecursive(Vector(Graph(1 -> 2), Graph(3 -> 4), Graph(2 -> 3))))
 And it passes all of our laws:
 
 ```scala
-testUnion(unionRecursive).check()
+runUnionTest(unionRecursive)
 // + union.empty: OK, proved property.
-// + union.singleton: OK, passed 100 tests.
-// + union.duplicates: OK, passed 100 tests.
-// + union.outputs disjoint: OK, passed 100 tests.
-// + union.inputs disjoint: OK, passed 100 tests.
-// + union.same edges and vertices: OK, passed 100 tests.
+// + union.singleton: OK, passed 1000 tests.
+// + union.duplicates: OK, passed 1000 tests.
+// + union.outputs disjoint: OK, passed 1000 tests.
+// + union.inputs disjoint: OK, passed 1000 tests.
+// + union.same edges and vertices: OK, passed 1000 tests.
 ```
 
 ## A Faster Solution
@@ -261,12 +268,12 @@ def unionFast(gs: Vector[Graph]): Vector[Graph] =
       }
   }(0).filterNot(_ eq null)
 
-testUnion(unionFast).check()
+runUnionTest(unionFast)
 // + union.empty: OK, proved property.
-// + union.singleton: OK, passed 100 tests.
-// + union.duplicates: OK, passed 100 tests.
-// + union.outputs disjoint: OK, passed 100 tests.
-// + union.inputs disjoint: OK, passed 100 tests.
-// + union.same edges and vertices: OK, passed 100 tests.
+// + union.singleton: OK, passed 1000 tests.
+// + union.duplicates: OK, passed 1000 tests.
+// + union.outputs disjoint: OK, passed 1000 tests.
+// + union.inputs disjoint: OK, passed 1000 tests.
+// + union.same edges and vertices: OK, passed 1000 tests.
 ```
 

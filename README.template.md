@@ -54,7 +54,7 @@ We can also say that the union of input graphs must be equal to the union of all
 Let's write these laws as a [ScalaCheck](https://scalacheck.org/) test. For starters, we'll need a generator for graphs:
 
 ```scala mdoc
-import org.scalacheck.{Arbitrary, Gen, Prop, Properties}
+import org.scalacheck.{Arbitrary, Gen, Prop, Properties, Test}
 
 def genGraph: Gen[Graph] = Gen.sized { size =>
   val maxVertexId = 2 * size
@@ -125,9 +125,12 @@ def alternateDefinition(union: Vector[Graph] => Vector[Graph]): Prop =
 
 Given this test definition, let's try testing with various wrong but instructive functions in place of union:
 ```scala mdoc
-testUnion(identity).check()
+def runUnionTest(union: Vector[Graph] => Vector[Graph]): Unit =
+  testUnion(union).check(Test.Parameters.default.withMinSuccessfulTests(1000))
 
-testUnion(_ => Vector.empty).check()
+runUnionTest(identity)
+
+runUnionTest(_ => Vector.empty)
 ```
 
 ## A First Solution
@@ -158,7 +161,7 @@ println(unionFirst(Vector(Graph(1 -> 2), Graph(3 -> 4), Graph(2 -> 3))))
 When the second input graph is processed, it's disjoint with all the graphs processed so far (i.e., the first graph). When the third graph is processed, it's merged with the first, resulting in an output of two graphs. But those two graphs share a common vertex of 3. It seems that each time we merge graphs, we need to reconsider whether the disjoint set is still disjoint. More on that in a moment. First, let's run our test on this implementation and see if it also finds a counterexample:
 
 ```scala mdoc
-testUnion(unionFirst).check()
+runUnionTest(unionFirst)
 ```
 
 Okay, so when we merge a graph in to the disjoint set, two entries that were previously disjoint may no longer be disjoint. We could fix our issue by recursively calling our union function after merging -- i.e. `unionFirst(acc.updated(idx, acc(idx) |+| g))` -- but doing so wouldn't be tail recursive. Instead, we could run the full fold and when it completes, check if we've done any merges. If so, we recurse and otherwise we return. We can test if we've done merges by comparing the size of the input to the size of the output.
@@ -185,7 +188,7 @@ println(unionRecursive(Vector(Graph(1 -> 2), Graph(3 -> 4), Graph(2 -> 3))))
 And it passes all of our laws:
 
 ```scala mdoc
-testUnion(unionRecursive).check()
+runUnionTest(unionRecursive)
 ```
 
 ## A Faster Solution
@@ -211,6 +214,6 @@ def unionFast(gs: Vector[Graph]): Vector[Graph] =
       }
   }(0).filterNot(_ eq null)
 
-testUnion(unionFast).check()
+runUnionTest(unionFast)
 ```
 
