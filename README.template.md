@@ -80,7 +80,7 @@ def genGraph(edgeFactor: Double = 0.1, maxVertexId: Int = 1 << 15): Gen[Graph] =
 given arbitraryGraph: Arbitrary[Graph] = Arbitrary(genGraph())
 ```
 
-There's a bit of fine tuning going on here. The `edgeFactor` parameter, when multiplied by the configured generator size, specified the maximum number of edges that should be included in each graph. The `maxVertexId` parameter specifies the maximum vertex id. If we keep `edgeFactor` constant while redducing `maxVertexId`, we increase the likelihood of vertex overlaps between generated graphs.
+There's a bit of fine tuning going on here. The `edgeFactor` parameter, when multiplied by the configured generator size, specifies the maximum number of edges that should be included in each graph. The `maxVertexId` parameter specifies the maximum vertex id. If we keep `edgeFactor` constant while reducing `maxVertexId`, we increase the likelihood of vertex overlaps between generated graphs.
 
 Given this generator, we can define various properties for each of the laws we came up with:
 
@@ -140,7 +140,7 @@ Given this test definition, let's try testing with various wrong but instructive
 def runUnionTest(union: Vector[Graph] => Vector[Graph]): Unit =
   testUnion(union).check(
     Test.Parameters.default
-      .withMinSuccessfulTests(1) // TODO
+      .withMinSuccessfulTests(200)
       .withInitialSeed(0L) // Generate same results on each run
   )
 
@@ -195,7 +195,7 @@ def unionRecursive(gs: Vector[Graph]): Vector[Graph] =
 
 This is the same implementation as `unionFirst` except the final statement, which compares the size of the input to the size of the output. If they are the same, then we've done no merges and we return the result. Otherwise, we recurse on the output.
 
-This version works with our problematice example:
+This version works with our problematic example:
 
 ```scala mdoc
 println(unionRecursive(Vector(Graph(1 -> 2), Graph(3 -> 4), Graph(2 -> 3))))
