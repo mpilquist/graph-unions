@@ -1,4 +1,4 @@
-# Graph Unions
+# Disjoint Graph Unions: Performance Case Study
 
 I recently came across an interesting problem:
 

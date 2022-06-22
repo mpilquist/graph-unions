@@ -1,4 +1,4 @@
-# Graph Unions
+# Disjoint Graph Unions: Performance Case Study
 
 I recently came across an interesting problem:
 
@@ -296,20 +296,20 @@ def runPerformanceSuite(union: Vector[Graph] => Vector[Graph]): Unit =
 
 runPerformanceSuite(unionRecursive)
 // ---- 10K less disjoint -----------------------------------------
-// Took 196 millis to generate
+// Took 221 millis to generate
 // Vertices: count 10000 min 2 max 20 mean 10.97
 // Edges: count 10000 min 1 max 10 mean 5.49
-// Reduced from 10000 to 2 in 341 millis
+// Reduced from 10000 to 2 in 338 millis
 // ---- 10K more disjoint -----------------------------------------
-// Took 136 millis to generate
+// Took 78 millis to generate
 // Vertices: count 10000 min 2 max 20 mean 10.97
 // Edges: count 10000 min 1 max 10 mean 5.49
-// Reduced from 10000 to 4599 in 24873 millis
+// Reduced from 10000 to 4599 in 25939 millis
 // ---- 100K less disjoint -----------------------------------------
-// Took 308 millis to generate
+// Took 624 millis to generate
 // Vertices: count 100000 min 2 max 20 mean 10.99
 // Edges: count 100000 min 1 max 10 mean 5.50
-// Reduced from 100000 to 1353 in 49656 millis
+// Reduced from 100000 to 1353 in 40022 millis
 ```
 
 This initial algorithm seems to be pretty fast when there's a lot of overlap -- that is, when the final disjoint set has a small number of elements. This makes sense, as this algorithm makes use of an `indexWhere` on the accumulated disjoint set for each element. In the worst case, where the input set is fully disjoint, this algorithm is quadratic in the number of graphs. In the context I first encountered this problem, the input generally reduced by ~50% and the total input size was roughly 500K graphs with, on average, less than 10 vertices per graph. Hence, this solution was not suitable and I needed something that performed better for this data set.
@@ -357,20 +357,20 @@ How about performance?
 ```scala
 runPerformanceSuite(unionFast)
 // ---- 10K less disjoint -----------------------------------------
-// Took 33 millis to generate
+// Took 92 millis to generate
 // Vertices: count 10000 min 2 max 20 mean 10.97
 // Edges: count 10000 min 1 max 10 mean 5.49
-// Reduced from 10000 to 2 in 209 millis
+// Reduced from 10000 to 2 in 350 millis
 // ---- 10K more disjoint -----------------------------------------
-// Took 30 millis to generate
+// Took 36 millis to generate
 // Vertices: count 10000 min 2 max 20 mean 10.97
 // Edges: count 10000 min 1 max 10 mean 5.49
-// Reduced from 10000 to 4599 in 181 millis
+// Reduced from 10000 to 4599 in 241 millis
 // ---- 100K less disjoint -----------------------------------------
-// Took 321 millis to generate
+// Took 309 millis to generate
 // Vertices: count 100000 min 2 max 20 mean 10.99
 // Edges: count 100000 min 1 max 10 mean 5.50
-// Reduced from 100000 to 1353 in 2032 millis
+// Reduced from 100000 to 1353 in 1909 millis
 ```
 
 This performs significantly faster than `unionRecursive`, especially when the input is mostly disjoint. In a real world data set, this implementation proved to be thousands of times faster than `unionRecursive`. This ended up being the difference between completely infeasible to pleasantly adequate.
